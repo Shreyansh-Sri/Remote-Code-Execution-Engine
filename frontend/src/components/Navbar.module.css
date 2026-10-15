@@ -1,0 +1,161 @@
+.navbar {
+  height: 56px;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.25rem;
+  z-index: 50;
+  user-select: none;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logoIcon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #ffa116 0%, #ff7b00 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 12px rgba(255, 161, 22, 0.45);
+}
+
+.codeLogo {
+  color: #1a1a1a;
+  stroke-width: 2.5;
+}
+
+.titleWrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brandTitle {
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+  background: linear-gradient(90deg, #f0f6fc, #93c5fd);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.badgeVersion {
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  font-weight: 600;
+}
+
+.brandSubtitle {
+  display: block;
+  font-size: 0.7rem;
+  color: #8b949e;
+}
+
+.navTabs {
+  display: flex;
+  gap: 6px;
+  background: #0d1117;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid #21262d;
+}
+
+.tabBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  color: #8b949e;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tabBtn:hover {
+  color: #f0f6fc;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.activeTab {
+  background: #21262d;
+  color: #f0f6fc;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.hotBadge {
+  font-size: 0.65rem;
+  background: rgba(244, 63, 94, 0.2);
+  color: #fb7185;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid rgba(244, 63, 94, 0.4);
+  font-weight: 600;
+}
+
+.clusterMetrics {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #0d1117;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #30363d;
+}
+
+.metricItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+}
+
+.queueIcon {
+  color: #fbbf24;
+}
+
+.workerIcon {
+  color: #34d399;
+}
+
+.metricLabel {
+  color: #8b949e;
+}
+
+.metricVal {
+  color: #f0f6fc;
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+.queueActive {
+  color: #fbbf24;
+  animation: pulse-queued 1.2s infinite;
+}
+
+.metricValHighlighted {
+  color: #34d399;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.divider {
+  width: 1px;
+  height: 16px;
+  background: #30363d;
+}

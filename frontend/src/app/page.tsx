@@ -56,80 +56,102 @@ export default function Home() {
     }
   };
 
-  // Simulated code execution (Runs locally or through backend API if active)
+  // Real backend execution via FastAPI + SSE Streaming
   const executeCode = async (isFullSubmit: boolean) => {
     setStatus("QUEUED");
-    setQueueDepth((d) => d + 1);
     setTerminalLogs([
-      `[${new Date().toISOString()}] Job created. Pushed to Redis Stream "judge:submissions"`,
-      `[${new Date().toISOString()}] Waiting for worker pod assignment...`,
+      `[${new Date().toISOString()}] Sending code to Judge API Gateway (http://localhost:8080)...`
     ]);
 
-    // Step 1: Worker claims task from queue
-    setTimeout(() => {
-      setQueueDepth((d) => Math.max(0, d - 1));
-      setStatus("SPAWNING_SANDBOX");
+    // Reset testcases to pending
+    setTestCases((prev) => prev.map((tc) => ({ ...tc, status: "PENDING", actualOutput: undefined })));
+
+    try {
+      const response = await fetch("http://localhost:8080/api/submissions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          problem_id: currentProblem.id,
+          language: language,
+          code: code,
+          only_first_case: false,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+      }
+
+      const { submission_id } = await response.json();
       setTerminalLogs((prev) => [
         ...prev,
-        `[${new Date().toISOString()}] Claimed by worker-pod-3a9f (nsjail cgroup v2)`,
-        `[${new Date().toISOString()}] Mounting read-only rootfs + tmpfs scratch space`,
-        `[${new Date().toISOString()}] Enforcing seccomp syscall filters & disabling network...`,
+        `[${new Date().toISOString()}] Enqueued as ${submission_id}. Connecting to live SSE telemetry...`,
       ]);
-    }, 700);
 
-    // Step 2: Stream test cases
-    setTimeout(() => {
-      setStatus("RUNNING");
-      const casesToRun = isFullSubmit
-        ? currentProblem.testCases
-        : [currentProblem.testCases[0]];
+      // Connect to Server-Sent Events stream
+      const eventSource = new EventSource(`http://localhost:8080/api/submissions/${submission_id}/stream`);
 
-      let currentCaseIdx = 0;
+      eventSource.onmessage = (e) => {
+        try {
+          const event = JSON.parse(e.data);
 
-      const runInterval = setInterval(() => {
-        if (currentCaseIdx < casesToRun.length) {
-          const idx = currentCaseIdx;
-          setTestCases((prev) => {
-            const updated = [...prev];
-            if (updated[idx]) {
-              updated[idx] = {
-                ...updated[idx],
-                status: "PASSED",
-                actualOutput: updated[idx].expectedOutput,
-                executionTimeMs: Math.floor(Math.random() * 20) + 8,
-                memoryMb: 14.2,
-              };
-            }
-            return updated;
-          });
-
-          setTerminalLogs((prev) => [
-            ...prev,
-            `[EXEC] TestCase ${idx + 1}/${casesToRun.length}: PASSED (exit code 0, 14ms)`,
-          ]);
-
-          currentCaseIdx++;
-        } else {
-          clearInterval(runInterval);
-          setStatus("ACCEPTED");
-          setExecutionTime(32);
-          setMemoryPeak(14.2);
-          setTerminalLogs((prev) => [
-            ...prev,
-            `[COMPLETE] All ${casesToRun.length} testcases passed successfully!`,
-            `[METRICS] Wall time: 32ms | Peak memory: 14.2MB | Cgroup cleanup complete.`,
-          ]);
-
-          if (isFullSubmit) {
-            confetti({
-              particleCount: 80,
-              spread: 70,
-              origin: { y: 0.6 },
+          if (event.type === "QUEUE_STATUS") {
+            setStatus("QUEUED");
+          } else if (event.type === "SANDBOX_INIT") {
+            setStatus("SPAWNING_SANDBOX");
+            setTerminalLogs((prev) => [...prev, event.message]);
+          } else if (event.type === "LOG") {
+            setStatus("RUNNING");
+            setTerminalLogs((prev) => [...prev, event.message]);
+          } else if (event.type === "TEST_PROGRESS") {
+            setTestCases((prev) => {
+              const updated = [...prev];
+              const idx = updated.findIndex((tc) => tc.id === event.case_id);
+              if (idx !== -1) {
+                updated[idx] = {
+                  ...updated[idx],
+                  status: event.status,
+                  actualOutput: event.actual_output,
+                  executionTimeMs: event.execution_time_ms,
+                };
+              }
+              return updated;
             });
+          } else if (event.type === "COMPLETED") {
+            setStatus(event.status);
+            if (event.total_time_ms) setExecutionTime(event.total_time_ms);
+            if (event.memory_mb) setMemoryPeak(event.memory_mb);
+            if (event.logs) {
+              setTerminalLogs((prev) => [...prev, ...event.logs]);
+            }
+
+            if (event.status === "ACCEPTED" && isFullSubmit) {
+              confetti({
+                particleCount: 80,
+                spread: 70,
+                origin: { y: 0.6 },
+              });
+            }
+
+            eventSource.close();
           }
+        } catch (err) {
+          console.error("SSE parse error", err);
         }
-      }, 500);
-    }, 1500);
+      };
+
+      eventSource.onerror = () => {
+        eventSource.close();
+      };
+
+    } catch (err: any) {
+      setStatus("RUNTIME_ERROR");
+      setTerminalLogs((prev) => [
+        ...prev,
+        `[ERROR] Failed to connect to backend engine: ${err.message}`,
+        `Ensure backend is running on http://localhost:8000`
+      ]);
+    }
   };
 
   return (

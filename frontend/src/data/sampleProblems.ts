@@ -54,6 +54,8 @@ if __name__ == "__main__":
 `,
       cpp: `#include <iostream>
 #include <vector>
+#include <string>
+#include <sstream>
 #include <unordered_map>
 
 using namespace std;
@@ -70,12 +72,35 @@ vector<int> twoSum(vector<int>& nums, int target) {
     return {};
 }
 
+// Helper to parse "[2, 7, 11, 15]" into vector<int>
+vector<int> parseArray(const string& str) {
+    vector<int> res;
+    stringstream ss;
+    for (char c : str) {
+        if (c == ',' || c == '[' || c == ']') ss << ' ';
+        else ss << c;
+    }
+    int val;
+    while (ss >> val) res.push_back(val);
+    return res;
+}
+
 int main() {
-    // Fast I/O
     ios_base::sync_with_stdio(false);
     cin.tie(NULL);
-    // Sandboxed runner driver
-    cout << "[0, 1]" << endl;
+
+    string line1;
+    if (getline(cin, line1)) {
+        int target;
+        cin >> target;
+        vector<int> nums = parseArray(line1);
+        vector<int> ans = twoSum(nums, target);
+        if (ans.size() == 2) {
+            cout << "[" << ans[0] << ", " << ans[1] << "]" << endl;
+        } else {
+            cout << "[]" << endl;
+        }
+    }
     return 0;
 }
 `,
@@ -144,7 +169,7 @@ func main() {
       },
       {
         id: 4,
-        input: "[1, 5, 8, 12, 19]\n20",
+        input: "[1, 5, 7, 12, 19]\n20",
         expectedOutput: "[0, 4]",
       },
       {

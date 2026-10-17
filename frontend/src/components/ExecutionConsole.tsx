@@ -32,6 +32,17 @@ export const ExecutionConsole: React.FC<ExecutionConsoleProps> = ({
   const [activeTab, setActiveTab] = useState<"testcases" | "terminal">("testcases");
   const [selectedCaseIndex, setSelectedCaseIndex] = useState(0);
 
+  // Automatically switch to terminal if an error occurs so the user immediately sees the trace/reason
+  React.useEffect(() => {
+    if (
+      status === "RUNTIME_ERROR" ||
+      status === "COMPILATION_ERROR" ||
+      status === "TIME_LIMIT_EXCEEDED"
+    ) {
+      setActiveTab("terminal");
+    }
+  }, [status]);
+
   const selectedCase = testCases[selectedCaseIndex] || testCases[0];
 
   return (

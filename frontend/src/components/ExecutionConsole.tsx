@@ -39,7 +39,9 @@ export const ExecutionConsole: React.FC<ExecutionConsoleProps> = ({
       status === "COMPILATION_ERROR" ||
       status === "TIME_LIMIT_EXCEEDED"
     ) {
-      setActiveTab("terminal");
+      queueMicrotask(() => {
+        setActiveTab("terminal");
+      });
     }
   }, [status]);
 

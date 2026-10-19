@@ -27,8 +27,9 @@ export default function Home() {
   const [memoryPeak, setMemoryPeak] = useState<number | undefined>();
 
   // Mock cluster state
-  const [workerCount, setWorkerCount] = useState<number>(3);
-  const [queueDepth, setQueueDepth] = useState<number>(0);
+  const [workerCount] = useState<number>(3);
+  const [queueDepth] = useState<number>(0);
+
 
   // Switch problem and load matching template
   const handleSelectProblem = (p: Problem) => {
@@ -144,11 +145,12 @@ export default function Home() {
         eventSource.close();
       };
 
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
       setStatus("RUNTIME_ERROR");
       setTerminalLogs((prev) => [
         ...prev,
-        `[ERROR] Failed to connect to backend engine: ${err.message}`,
+        `[ERROR] Failed to connect to backend engine: ${errorMessage}`,
         `Ensure backend is running on http://localhost:8000`
       ]);
     }

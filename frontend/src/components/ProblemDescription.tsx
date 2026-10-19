@@ -2,7 +2,7 @@
 
 import React from "react";
 import { Problem } from "@/types/judge";
-import { CheckCircle2, AlertCircle, FileText, Sparkles } from "lucide-react";
+import { AlertCircle, FileText, Sparkles } from "lucide-react";
 import styles from "./ProblemDescription.module.css";
 
 interface ProblemDescriptionProps {

@@ -40,5 +40,5 @@ export type SubmissionStatus =
 export interface StreamEvent {
   type: "QUEUE_STATUS" | "SANDBOX_INIT" | "TEST_PROGRESS" | "EXECUTION_COMPLETE" | "LOG";
   timestamp: number;
-  data: any;
+  data: Record<string, unknown> | unknown;
 }

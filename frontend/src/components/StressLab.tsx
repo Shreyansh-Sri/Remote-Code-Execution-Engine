@@ -8,7 +8,6 @@ import {
   Activity,
   BarChart3,
   CheckCircle,
-  AlertTriangle,
   Play,
   RotateCcw,
 } from "lucide-react";
@@ -28,7 +27,6 @@ export const StressLab: React.FC = () => {
   const [activeWorkers, setActiveWorkers] = useState(2);
   const [queueCount, setQueueCount] = useState(0);
   const [completedCount, setCompletedCount] = useState(0);
-  const [failedCount, setFailedCount] = useState(0);
   const [recentSubmissions, setRecentSubmissions] = useState<StressSubmission[]>([]);
 
   // Simulation loop for testing 500 concurrent submissions
@@ -59,7 +57,7 @@ export const StressLab: React.FC = () => {
           // Add simulated records to feed
           const newEntries: StressSubmission[] = Array.from({
             length: Math.min(3, processedBatch),
-          }).map((_, i) => ({
+          }).map(() => ({
             id: `sub_${Math.random().toString(36).substr(2, 6)}`,
             lang: ["Python", "C++", "Go", "JS"][Math.floor(Math.random() * 4)],
             workerId: `worker-pod-${Math.floor(Math.random() * activeWorkers) + 1}`,
@@ -80,7 +78,6 @@ export const StressLab: React.FC = () => {
   const handleStartStressTest = () => {
     setQueueCount(targetConcurrency);
     setCompletedCount(0);
-    setFailedCount(0);
     setActiveWorkers(2);
     setRecentSubmissions([]);
     setIsRunning(true);
@@ -90,7 +87,6 @@ export const StressLab: React.FC = () => {
     setIsRunning(false);
     setQueueCount(0);
     setCompletedCount(0);
-    setFailedCount(0);
     setActiveWorkers(2);
     setRecentSubmissions([]);
   };

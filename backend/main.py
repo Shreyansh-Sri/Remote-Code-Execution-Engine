@@ -105,3 +105,10 @@ if __name__ == "__main__":
     if sys.platform == "win32":
         loop_arg = asyncio.ProactorEventLoop
     uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=True, loop=loop_arg)
+
+@app.get("/", include_in_schema=False)
+async def root():
+    """
+    Simple health‑check / welcome endpoint.
+    """
+    return {"message": "PulseOps AI backend is running. Visit /docs for the API UI."}

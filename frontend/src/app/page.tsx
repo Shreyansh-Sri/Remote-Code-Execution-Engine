@@ -61,14 +61,14 @@ export default function Home() {
   const executeCode = async (isFullSubmit: boolean) => {
     setStatus("QUEUED");
     setTerminalLogs([
-      `[${new Date().toISOString()}] Sending code to Judge API Gateway (http://localhost:8080)...`
+      `[${new Date().toISOString()}] Sending code to Judge API Gateway (http://localhost:8000)...`
     ]);
 
     // Reset testcases to pending
     setTestCases((prev) => prev.map((tc) => ({ ...tc, status: "PENDING", actualOutput: undefined })));
 
     try {
-      const response = await fetch("http://localhost:8080/api/submissions", {
+      const response = await fetch("http://localhost:8000/api/submissions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -90,7 +90,7 @@ export default function Home() {
       ]);
 
       // Connect to Server-Sent Events stream
-      const eventSource = new EventSource(`http://localhost:8080/api/submissions/${submission_id}/stream`);
+      const eventSource = new EventSource(`http://localhost:8000/api/submissions/${submission_id}/stream`);
 
       eventSource.onmessage = (e) => {
         try {

@@ -1,5 +1,10 @@
 FROM python:3.12-slim
-RUN useradd -m -u 65534 -s /bin/sh sandbox
+
+# Create a non‑root sandbox user (UID 1000 is free in the base image)
+RUN useradd -m -u 1000 -s /bin/sh sandbox
+
 WORKDIR /sandbox
 USER sandbox
+
+# The runner expects the solution file at /sandbox/solution.py
 ENTRYPOINT ["python", "/sandbox/solution.py"]

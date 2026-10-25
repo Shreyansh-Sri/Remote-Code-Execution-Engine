@@ -1,11 +1,11 @@
-"""
-Sandboxed Code Execution Engine.
+﻿"""
+Sandboxed Code Execution Engine (Docker-backed).
 
 Responsible for:
 1. Creating an isolated ephemeral temp directory for each submission.
-2. Compiling (if C++) with strict timeout.
-3. Piping testcase `stdin` and capturing `stdout` / `stderr`.
-4. Enforcing wall-clock timeouts to kill infinite loops.
+2. Compiling (if C++) with strict timeout inside the Docker container.
+3. Piping testcase stdin and capturing stdout / stderr via Docker.
+4. Enforcing wall-clock timeouts to kill runaway containers.
 5. Measuring millisecond execution runtime and comparing with expected output.
 """
 
@@ -15,12 +15,50 @@ import time
 import asyncio
 import tempfile
 import json
+import subprocess
 from typing import Dict, Any, List, AsyncGenerator
 from runner.languages import LANGUAGE_CONFIGS
 
+DOCKER_IMAGES = {
+    "python": "judge-python",
+    "javascript": "judge-javascript",
+    "cpp": "judge-cpp",
+}
+
 class SandboxExecutionEngine:
-    def __init__(self, timeout_seconds: float = 2.0):
+    def __init__(self, timeout_seconds: float = 5.0):
         self.timeout_seconds = timeout_seconds
+
+    def _run_sync_process(self, cmd: List[str], input_data: str = None, timeout: float = None):
+        """Runs a subprocess synchronously in a thread, bypassing Windows Proactor event loop issues."""
+        try:
+            res = subprocess.run(
+                cmd,
+                input=input_data,
+                text=True,
+                capture_output=True,
+                timeout=timeout
+            )
+            return {
+                "timed_out": False,
+                "returncode": res.returncode,
+                "stdout": res.stdout,
+                "stderr": res.stderr
+            }
+        except subprocess.TimeoutExpired:
+            return {
+                "timed_out": True,
+                "returncode": -1,
+                "stdout": "",
+                "stderr": "Time Limit Exceeded"
+            }
+        except Exception as e:
+            return {
+                "timed_out": False,
+                "returncode": -1,
+                "stdout": "",
+                "stderr": str(e)
+            }
 
     async def execute_submission(
         self,
@@ -30,9 +68,6 @@ class SandboxExecutionEngine:
         test_cases: List[Dict[str, Any]],
         only_first_case: bool = False
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        """
-        Yields real-time events as execution progresses through compilation and test cases.
-        """
         lang_cfg = LANGUAGE_CONFIGS.get(language)
         if not lang_cfg:
             yield {
@@ -43,6 +78,16 @@ class SandboxExecutionEngine:
             }
             return
 
+        docker_image = DOCKER_IMAGES.get(language)
+        if not docker_image:
+            yield {
+                "type": "COMPLETED",
+                "status": "RUNTIME_ERROR",
+                "error": f"No Docker image configured for language: {language}",
+                "logs": [f"Missing Docker image for '{language}'. Build it first."]
+            }
+            return
+
         cases_to_run = test_cases[:1] if only_first_case else test_cases
 
         yield {
@@ -50,55 +95,56 @@ class SandboxExecutionEngine:
             "message": f"[{self._now()}] Initializing ephemeral sandbox for {submission_id}..."
         }
 
-        # Create isolated workspace directory for this execution
         with tempfile.TemporaryDirectory(prefix=f"judge_{submission_id}_") as sandbox_dir:
             source_file = os.path.join(sandbox_dir, lang_cfg["file_name"])
 
-            # 1. Write untrusted source code to the sandbox
             with open(source_file, "w", encoding="utf-8") as f:
                 f.write(code)
 
+            abs_sandbox_dir = os.path.abspath(sandbox_dir)
+
             yield {
-                "type": "SANDBOX_INIT",
-                "sandbox_path": sandbox_dir,
-                "language": language,
+                "type": "LOG",
                 "message": f"[{self._now()}] Sandbox created. Source written to {lang_cfg['file_name']}"
             }
 
-            # 2. Compilation step (if required by language like C++)
+            # Compilation step (C++)
             if lang_cfg.get("requires_compilation"):
                 yield {
                     "type": "LOG",
-                    "message": f"[{self._now()}] Compiling source: {' '.join(lang_cfg['compile_cmd'])}"
+                    "message": f"[{self._now()}] Compiling source inside Docker container..."
                 }
-                compile_proc = await asyncio.create_subprocess_exec(
-                    *lang_cfg["compile_cmd"],
-                    cwd=sandbox_dir,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
-                )
-                try:
-                    stdout, stderr = await asyncio.wait_for(compile_proc.communicate(), timeout=8.0)
-                except asyncio.TimeoutError:
-                    try:
-                        compile_proc.kill()
-                    except Exception:
-                        pass
+
+                compile_cmd = [
+                    "docker", "run", "--rm",
+                    "--network", "none",
+                    "--memory", "256m",
+                    "--cpus", "1",
+                    "-v", f"{abs_sandbox_dir}:/sandbox",
+                    "-w", "/sandbox",
+                    "--user", "root",
+                    "gcc:13-bookworm",
+                    "g++", "-std=c++11", "-O2", "solution.cpp", "-o", "solution"
+                ]
+
+                res = await asyncio.to_thread(self._run_sync_process, compile_cmd, None, 15.0)
+
+                if res["timed_out"]:
                     yield {
                         "type": "COMPLETED",
                         "status": "COMPILATION_ERROR",
-                        "error": "Compilation timed out (> 8.0s)",
+                        "error": "Compilation timed out (> 15s)",
                         "logs": ["Compilation took too long to complete. Aborted."]
                     }
                     return
 
-                if compile_proc.returncode != 0:
-                    err_msg = stderr.decode(errors="replace")
+                if res["returncode"] != 0:
+                    err_msg = res["stderr"]
                     yield {
                         "type": "COMPLETED",
                         "status": "COMPILATION_ERROR",
                         "error": err_msg,
-                        "logs": [f"Compilation failed with exit code {compile_proc.returncode}:", err_msg]
+                        "logs": [f"Compilation failed with exit code {res['returncode']}:", err_msg]
                     }
                     return
 
@@ -107,7 +153,7 @@ class SandboxExecutionEngine:
                     "message": f"[{self._now()}] Compilation succeeded. Binary generated."
                 }
 
-            # 3. Execute against each test case
+            # Execute against test cases
             all_passed = True
             total_time_ms = 0.0
 
@@ -123,36 +169,28 @@ class SandboxExecutionEngine:
 
                 start_time = time.perf_counter()
 
-                # Build execution command with absolute executable path in sandbox_dir
-                raw_cmd = lang_cfg["run_cmd"]
-                exe_target = os.path.join(sandbox_dir, raw_cmd[0]) if os.path.exists(os.path.join(sandbox_dir, raw_cmd[0])) else raw_cmd[0]
-                exec_cmd = [exe_target] + raw_cmd[1:]
+                docker_cmd = [
+                    "docker", "run", "--rm", "-i",
+                    "--network", "none",
+                    "--memory", "128m",
+                    "--cpus", "1",
+                    "--pids-limit", "64",
+                    "--user", "root",
+                    "-v", f"{abs_sandbox_dir}:/sandbox",
+                    docker_image
+                ]
 
-                # Spawn runner subprocess inside the sandbox
-                try:
-                    proc = await asyncio.create_subprocess_exec(
-                        *exec_cmd,
-                        cwd=sandbox_dir,
-                        stdin=asyncio.subprocess.PIPE,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE
-                    )
+                res = await asyncio.to_thread(
+                    self._run_sync_process,
+                    docker_cmd,
+                    stdin_data,
+                    self.timeout_seconds + 5
+                )
 
-                    stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                        proc.communicate(input=stdin_data.encode("utf-8")),
-                        timeout=self.timeout_seconds
-                    )
-                    runtime_ms = round((time.perf_counter() - start_time) * 1000, 2)
-                    total_time_ms += runtime_ms
+                runtime_ms = round((time.perf_counter() - start_time) * 1000, 2)
+                total_time_ms += runtime_ms
 
-                except asyncio.TimeoutError:
-                    # Enforce strict kill on infinite loop / hanging process
-                    try:
-                        proc.kill()
-                        await proc.wait()
-                    except Exception:
-                        pass
-                    
+                if res["timed_out"]:
                     yield {
                         "type": "TEST_PROGRESS",
                         "case_id": case_id,
@@ -169,26 +207,16 @@ class SandboxExecutionEngine:
                     }
                     return
 
-                except Exception as e:
-                    yield {
-                        "type": "COMPLETED",
-                        "status": "RUNTIME_ERROR",
-                        "error": str(e),
-                        "logs": [f"Subprocess spawn error: {str(e)}"]
-                    }
-                    return
+                actual_stdout = res["stdout"].strip()
+                stderr_text = res["stderr"].strip()
 
-                # Decode stdout/stderr
-                actual_stdout = stdout_bytes.decode(errors="replace").strip()
-                stderr_text = stderr_bytes.decode(errors="replace").strip()
-
-                if proc.returncode != 0:
+                if res["returncode"] != 0:
                     yield {
                         "type": "TEST_PROGRESS",
                         "case_id": case_id,
                         "status": "FAILED",
                         "execution_time_ms": runtime_ms,
-                        "actual_output": stderr_text or f"Runtime error (exit code {proc.returncode})",
+                        "actual_output": stderr_text or f"Runtime error (exit code {res['returncode']})",
                         "expected_output": expected_output
                     }
                     yield {
@@ -199,7 +227,6 @@ class SandboxExecutionEngine:
                     }
                     return
 
-                # Normalization comparison: Check if outputs match (ignoring extra whitespace)
                 is_correct = self._compare_outputs(actual_stdout, expected_output)
 
                 yield {
@@ -225,7 +252,6 @@ class SandboxExecutionEngine:
                     }
                     return
 
-            # All testcases executed and passed!
             avg_time = round(total_time_ms / len(cases_to_run), 2)
             yield {
                 "type": "COMPLETED",
@@ -239,13 +265,9 @@ class SandboxExecutionEngine:
             }
 
     def _compare_outputs(self, actual: str, expected: str) -> bool:
-        """
-        Robust comparison: handles JSON arrays, scalar values, or multi-line strings.
-        """
         if actual == expected:
             return True
         try:
-            # Check JSON equivalence e.g. [0, 1] == [0,1]
             return json.loads(actual) == json.loads(expected)
         except Exception:
             pass

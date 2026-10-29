@@ -325,4 +325,3 @@ data: {"type": "COMPLETED", "status": "ACCEPTED", "total_time_ms": 28.4}
 ## 👤 Author
 
 **Shreyansh Srivastava**
-- GitHub: [@Shreyansh-Sri](https://github.com/Shreyansh-Sri)

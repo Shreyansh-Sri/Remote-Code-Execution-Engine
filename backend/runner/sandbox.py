@@ -211,19 +211,23 @@ class SandboxExecutionEngine:
                 stderr_text = res["stderr"].strip()
 
                 if res["returncode"] != 0:
+                    is_oom = res["returncode"] == 137 or "MemoryError" in stderr_text
+                    status_code = "MEMORY_LIMIT_EXCEEDED" if is_oom else "RUNTIME_ERROR"
+                    err_label = "Memory Limit Exceeded (OOM Killed)" if is_oom else (stderr_text or f"Runtime error (exit code {res['returncode']})")
+
                     yield {
                         "type": "TEST_PROGRESS",
                         "case_id": case_id,
-                        "status": "FAILED",
+                        "status": "MLE" if is_oom else "FAILED",
                         "execution_time_ms": runtime_ms,
-                        "actual_output": stderr_text or f"Runtime error (exit code {res['returncode']})",
+                        "actual_output": err_label,
                         "expected_output": expected_output
                     }
                     yield {
                         "type": "COMPLETED",
-                        "status": "RUNTIME_ERROR",
-                        "error": stderr_text,
-                        "logs": [f"Execution crashed on TestCase {idx + 1}:", stderr_text]
+                        "status": status_code,
+                        "error": err_label,
+                        "logs": [f"Execution crashed on TestCase {idx + 1}:", err_label]
                     }
                     return
 

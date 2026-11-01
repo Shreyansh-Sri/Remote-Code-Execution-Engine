@@ -319,7 +319,6 @@ data: {"type": "COMPLETED", "status": "ACCEPTED", "total_time_ms": 28.4}
 - StressLab is a front-end simulation, not a live k6 load test. Real benchmark data will replace it after Kubernetes deployment.
 - Memory measurement (`memory_mb`) is not yet reading from cgroup — currently not reported.
 - Hidden test cases for judge problems are stored in `problems.py` on the backend and never sent to the client.
-
 ---
 
 ## 👤 Author

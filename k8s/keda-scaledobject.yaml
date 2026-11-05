@@ -1,0 +1,21 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: worker-redis-scaler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: codearena-worker
+  minReplicaCount: 1
+  maxReplicaCount: 10
+  cooldownPeriod: 30
+  pollingInterval: 5
+  triggers:
+  - type: redis-streams
+    metadata:
+      address: redis-service.default.svc.cluster.local:6379
+      stream: codearena:submissions
+      consumerGroup: judge_group
+      pendingEntriesCount: "5"
+

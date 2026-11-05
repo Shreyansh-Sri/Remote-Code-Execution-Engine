@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import confetti from "canvas-confetti";
 import { Navbar } from "@/components/Navbar";
 import { ProblemDescription } from "@/components/ProblemDescription";
@@ -10,6 +10,8 @@ import { StressLab } from "@/components/StressLab";
 import { SAMPLE_PROBLEMS } from "@/data/sampleProblems";
 import { Problem, TestCase, SubmissionStatus } from "@/types/judge";
 import styles from "./page.module.css";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"editor" | "load-test">("editor");
@@ -26,9 +28,35 @@ export default function Home() {
   const [executionTime, setExecutionTime] = useState<number | undefined>();
   const [memoryPeak, setMemoryPeak] = useState<number | undefined>();
 
-  // Mock cluster state
-  const [workerCount] = useState<number>(3);
-  const [queueDepth] = useState<number>(0);
+  // Cluster health telemetry state
+  const [workerCount, setWorkerCount] = useState<number>(4);
+  const [queueDepth, setQueueDepth] = useState<number>(0);
+
+  // Poll cluster health every 3 seconds
+  useEffect(() => {
+    let isMounted = true;
+    const fetchHealth = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/health`);
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted) {
+            if (typeof data.workers_active === "number") setWorkerCount(data.workers_active);
+            if (typeof data.queue_depth === "number") setQueueDepth(data.queue_depth);
+          }
+        }
+      } catch {
+        // Silently ignore if backend is temporarily starting up
+      }
+    };
+
+    fetchHealth();
+    const interval = setInterval(fetchHealth, 3000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
 
   // Switch problem and load matching template
@@ -61,21 +89,21 @@ export default function Home() {
   const executeCode = async (isFullSubmit: boolean) => {
     setStatus("QUEUED");
     setTerminalLogs([
-      `[${new Date().toISOString()}] Sending code to Judge API Gateway (http://localhost:8000)...`
+      `[${new Date().toISOString()}] Sending code to Judge API Gateway (${API_BASE_URL})...`
     ]);
 
     // Reset testcases to pending
     setTestCases((prev) => prev.map((tc) => ({ ...tc, status: "PENDING", actualOutput: undefined })));
 
     try {
-      const response = await fetch("http://localhost:8000/api/submissions", {
+      const response = await fetch(`${API_BASE_URL}/api/submissions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           problem_id: currentProblem.id,
           language: language,
           code: code,
-          only_first_case: false,
+          only_first_case: !isFullSubmit,
         }),
       });
 
@@ -90,7 +118,7 @@ export default function Home() {
       ]);
 
       // Connect to Server-Sent Events stream
-      const eventSource = new EventSource(`http://localhost:8000/api/submissions/${submission_id}/stream`);
+      const eventSource = new EventSource(`${API_BASE_URL}/api/submissions/${submission_id}/stream`);
 
       eventSource.onmessage = (e) => {
         try {
@@ -151,7 +179,7 @@ export default function Home() {
       setTerminalLogs((prev) => [
         ...prev,
         `[ERROR] Failed to connect to backend engine: ${errorMessage}`,
-        `Ensure backend is running on http://localhost:8000`
+        `Ensure backend is running on ${API_BASE_URL}`
       ]);
     }
   };

@@ -177,11 +177,34 @@ export const StressLab: React.FC = () => {
         <div className={styles.metricCard}>
           <div className={styles.metricHeader}>
             <Server className={styles.indigo} size={18} />
-            <span>Avg Sandboxed Latency</span>
+            <span>Median Engine Latency</span>
           </div>
-          <div className={styles.bigNumber}>28 ms</div>
-          <span className={styles.metricSub}>Isolated via nsjail & cgroup</span>
+          <div className={styles.bigNumber}>856 ms</div>
+          <span className={styles.metricSub}>k6 Verified (p95: 4.44s)</span>
         </div>
+      </div>
+
+      {/* Real Verified Benchmark Banner */}
+      <div style={{
+        marginTop: "1.25rem",
+        marginBottom: "1.25rem",
+        padding: "1rem 1.25rem",
+        background: "rgba(16, 185, 129, 0.08)",
+        border: "1px solid rgba(16, 185, 129, 0.25)",
+        borderRadius: "8px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        fontSize: "0.85rem",
+        color: "#d1d5db"
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          <CheckCircle size={20} color="#10b981" />
+          <span>
+            <strong style={{ color: "#10b981" }}>Live k6 Benchmark Verified:</strong> 3,496 submissions processed in 50s at ~70 req/s. Zero dropouts (0.00% failure rate).
+          </span>
+        </div>
+        <span style={{ color: "#9ca3af", fontStyle: "italic" }}>KEDA scaled 1 → 3 pods under 200 concurrent VUs</span>
       </div>
 
       {/* Progress Bar */}

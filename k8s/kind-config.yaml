@@ -1,0 +1,14 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+  extraPortMappings:
+  # Map host port 8080 to container port 30080 for FastAPI Backend
+  - containerPort: 30080
+    hostPort: 8080
+    protocol: TCP
+  # Map host port 3000 to container port 30000 for Next.js Frontend
+  - containerPort: 30000
+    hostPort: 3000
+    protocol: TCP
+

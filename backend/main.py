@@ -27,7 +27,8 @@ from problems import PROBLEMS_DB
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Launch background worker consumer tasks
+    # Startup: Connect to Redis Streams and launch background worker consumer tasks
+    await queue_manager.initialize()
     queue_manager.start_workers()
     yield
 
@@ -68,11 +69,12 @@ async def submit_code(req: SubmissionRequest):
     }
 
     await queue_manager.enqueue_submission(job_data)
+    depth = await queue_manager.get_queue_depth()
 
     return {
         "submission_id": submission_id,
         "status": "QUEUED",
-        "queue_depth": queue_manager.queue_depth,
+        "queue_depth": depth,
         "message": "Submission enqueued. Connect to /api/submissions/{id}/stream to follow execution."
     }
 
@@ -93,10 +95,12 @@ async def stream_submission(submission_id: str):
 @app.get("/api/health")
 async def health_check():
     """Returns cluster telemetry for the frontend navbar."""
+    depth = await queue_manager.get_queue_depth()
     return {
         "status": "healthy",
+        "redis_connected": queue_manager.use_redis,
         "workers_active": queue_manager.worker_count,
-        "queue_depth": queue_manager.queue_depth
+        "queue_depth": depth
     }
 
 if __name__ == "__main__":

@@ -206,6 +206,9 @@ class QueueManager:
                     "message": f"[{worker_id}] Dequeued {sub_id}. Preparing sandbox..."
                 })
 
+                user_id = job.get("user_id")
+                final_event = None
+
                 # Stream execution progress from sandbox
                 async for event in self.runner.execute_submission(
                     submission_id=sub_id,
@@ -214,7 +217,38 @@ class QueueManager:
                     test_cases=test_cases,
                     only_first_case=only_first_case
                 ):
+                    if event.get("type") == "COMPLETED":
+                        final_event = event
                     await self.publish_event(sub_id, event)
+
+                # Persist submission and solved progress in MongoDB
+                if user_id and final_event:
+                    try:
+                        from database import get_db
+                        from bson import ObjectId
+                        from datetime import datetime, timezone
+
+                        db = get_db()
+                        if db is not None:
+                            await db.submissions.insert_one({
+                                "submission_id": sub_id,
+                                "user_id": user_id,
+                                "problem_id": prob_id,
+                                "language": language,
+                                "code": code,
+                                "status": final_event.get("status"),
+                                "total_time_ms": final_event.get("total_time_ms"),
+                                "memory_mb": final_event.get("memory_mb"),
+                                "created_at": datetime.now(timezone.utc)
+                            })
+
+                            if final_event.get("status") == "ACCEPTED":
+                                await db.users.update_one(
+                                    {"_id": ObjectId(user_id)},
+                                    {"$addToSet": {"solved_problems": prob_id}}
+                                )
+                    except Exception as db_err:
+                        print(f"[{worker_id}] Failed to save submission to MongoDB: {db_err}")
 
                 # Acknowledge completion in Redis or local queue
                 if self.use_redis and self.redis and redis_msg_id:

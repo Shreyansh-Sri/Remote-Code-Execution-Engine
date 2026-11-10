@@ -17,22 +17,32 @@ from contextlib import asynccontextmanager
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
+from database import init_db, close_db
+from auth import get_current_user
+from auth_routes import router as auth_router
 from queue_manager import queue_manager
 from problems import PROBLEMS_DB
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Connect to Redis Streams and launch background worker consumer tasks
+    # Startup: Connect to MongoDB Atlas
+    await init_db()
+    # Connect to Redis Streams and launch background worker consumer tasks
     await queue_manager.initialize()
     queue_manager.start_workers()
     yield
+    # Shutdown
+    await close_db()
 
 app = FastAPI(title="CodeArena Remote Execution Engine", lifespan=lifespan)
+
+# Register Authentication & User Routes
+app.include_router(auth_router)
 
 # Allow Cross-Origin Requests from Next.js (port 3000)
 app.add_middleware(
@@ -50,10 +60,11 @@ class SubmissionRequest(BaseModel):
     only_first_case: bool = False
 
 @app.post("/api/submissions")
-async def submit_code(req: SubmissionRequest):
+async def submit_code(req: SubmissionRequest, current_user: Optional[dict] = Depends(get_current_user)):
     """
     Ingests user submission, pushes it to the worker queue,
     and returns a unique submission_id immediately without blocking.
+    Associates submission with current_user if authenticated.
     """
     if req.language not in ["python", "javascript", "cpp"]:
         raise HTTPException(status_code=400, detail=f"Unsupported language: {req.language}")
@@ -65,7 +76,8 @@ async def submit_code(req: SubmissionRequest):
         "problem_id": req.problem_id,
         "language": req.language,
         "code": req.code,
-        "only_first_case": req.only_first_case
+        "only_first_case": req.only_first_case,
+        "user_id": current_user["id"] if current_user else None
     }
 
     await queue_manager.enqueue_submission(job_data)

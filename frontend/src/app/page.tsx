@@ -7,6 +7,7 @@ import { ProblemDescription } from "@/components/ProblemDescription";
 import { CodeEditor } from "@/components/CodeEditor";
 import { ExecutionConsole } from "@/components/ExecutionConsole";
 import { StressLab } from "@/components/StressLab";
+import { useAuth } from "@/context/AuthContext";
 import { SAMPLE_PROBLEMS } from "@/data/sampleProblems";
 import { Problem, TestCase, SubmissionStatus } from "@/types/judge";
 import styles from "./page.module.css";
@@ -20,6 +21,8 @@ export default function Home() {
   const [code, setCode] = useState<string>(
     SAMPLE_PROBLEMS[0].defaultTemplates.python || ""
   );
+
+  const { token, refreshUser } = useAuth();
 
   // Execution state
   const [status, setStatus] = useState<SubmissionStatus>("IDLE");
@@ -96,9 +99,14 @@ export default function Home() {
     setTestCases((prev) => prev.map((tc) => ({ ...tc, status: "PENDING", actualOutput: undefined })));
 
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
       const response = await fetch(`${API_BASE_URL}/api/submissions`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           problem_id: currentProblem.id,
           language: language,
@@ -155,6 +163,7 @@ export default function Home() {
             }
 
             if (event.status === "ACCEPTED" && isFullSubmit) {
+              refreshUser();
               confetti({
                 particleCount: 80,
                 spread: 70,
